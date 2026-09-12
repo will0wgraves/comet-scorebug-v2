@@ -1,0 +1,6 @@
+{
+  "name": "comet! LFG NFL on FOX Scorebug",
+  "description": "2023 FOX NFL style broadcast scorebug and control room for comet! streaming Roblox Football Fusion 3 LFG Season 56 with live Lua workspace sync and slot machine score animations.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

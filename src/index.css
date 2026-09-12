@@ -1,0 +1,17 @@
+@import "tailwindcss";
+
+:root {
+  font-family: 'Red Hat Display', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+}
+
+body,
+button,
+input,
+select,
+textarea {
+  font-family: 'Red Hat Display', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+}
+
+.font-redhat {
+  font-family: 'Red Hat Display', sans-serif !important;
+}
