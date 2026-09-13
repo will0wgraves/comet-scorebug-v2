@@ -17,22 +17,28 @@ import {
   ExternalLink,
   Radio,
   Sliders,
-  Sparkles
+  Sparkles,
+  Palette,
+  Search,
+  Check
 } from 'lucide-react';
 import { FootballState, TeamInfo } from '../types';
 import { DEFAULT_LFG_TEAMS } from '../data/defaultTeams';
 import { stateSync } from '../services/stateSync';
+import { HexImportModal } from './HexImportModal';
 
 interface ControlRoomProps {
   state: FootballState;
   onUpdateState: (partial: Partial<FootballState>) => void;
-  onTriggerSpinAway: () => void;
-  onTriggerSpinHome: () => void;
+  onTriggerGoal?: (team: 'away' | 'home') => void;
+  onTriggerSpinAway?: () => void;
+  onTriggerSpinHome?: () => void;
 }
 
 export const ControlRoom: React.FC<ControlRoomProps> = ({
   state,
   onUpdateState,
+  onTriggerGoal,
   onTriggerSpinAway,
   onTriggerSpinHome
 }) => {
@@ -54,6 +60,44 @@ export const ControlRoom: React.FC<ControlRoomProps> = ({
   const [awaySelectIdx, setAwaySelectIdx] = useState<number>(0);
   const [homeSelectIdx, setHomeSelectIdx] = useState<number>(1);
   const [rosterSaveStatus, setRosterSaveStatus] = useState<string>('Ready');
+  const [isHexModalOpen, setIsHexModalOpen] = useState<boolean>(false);
+  const [teamSearchQuery, setTeamSearchQuery] = useState<string>('');
+  const [quickPasteTeamIdx, setQuickPasteTeamIdx] = useState<number | null>(null);
+
+  // Filtered roster for search
+  const filteredRoster = React.useMemo(() => {
+    if (!teamSearchQuery.trim()) {
+      return roster.map((team, originalIdx) => ({ team, originalIdx }));
+    }
+    const q = teamSearchQuery.toLowerCase().trim();
+    return roster
+      .map((team, originalIdx) => ({ team, originalIdx }))
+      .filter(
+        ({ team }) =>
+          team.name.toLowerCase().includes(q) ||
+          team.abbr.toLowerCase().includes(q) ||
+          team.gradients[0].toLowerCase().includes(q) ||
+          team.gradients[1].toLowerCase().includes(q)
+      );
+  }, [roster, teamSearchQuery]);
+
+  // Quick hex paste directly on a team card
+  const handleCardQuickHexPaste = (originalIdx: number, text: string) => {
+    const matches = text.match(/#?([0-9a-fA-F]{6}|[0-9a-fA-F]{3})/g) || [];
+    if (matches.length > 0) {
+      const hexes = matches.map((h) => (h.startsWith('#') ? h : `#${h}`));
+      const updated = [...roster];
+      updated[originalIdx] = {
+        ...updated[originalIdx],
+        gradients: [hexes[0], hexes[1] || hexes[0]],
+        accent: hexes[2] || hexes[1] || hexes[0]
+      };
+      saveRoster(updated);
+      if (originalIdx === awaySelectIdx || originalIdx === homeSelectIdx) {
+        applyMatchup(awaySelectIdx, homeSelectIdx);
+      }
+    }
+  };
 
   // Clock timer state
   const [isClockRunning, setIsClockRunning] = useState(false);
@@ -273,23 +317,32 @@ export const ControlRoom: React.FC<ControlRoomProps> = ({
     };
   }, [isPlayClockRunning, state.playClock, onUpdateState]);
 
-  // Helper for Touchdown trigger
-  const triggerTouchdown = (team: 'away' | 'home') => {
-    onUpdateState({
-      touchdownActive: true,
-      touchdownTeam: team
-    });
-    // Also increment score by 6
-    if (team === 'away') {
-      onUpdateState({ awayScore: state.awayScore + 6 });
-      onTriggerSpinAway();
-    } else {
-      onUpdateState({ homeScore: state.homeScore + 6 });
-      onTriggerSpinHome();
+  // Helper for TUDN Liga MX Goal Gradient Swipe trigger
+  const triggerGoalCelebration = (team: 'away' | 'home', scoreIncrement?: number) => {
+    if (scoreIncrement && scoreIncrement > 0) {
+      if (team === 'away') {
+        onUpdateState({ awayScore: state.awayScore + scoreIncrement });
+      } else {
+        onUpdateState({ homeScore: state.homeScore + scoreIncrement });
+      }
     }
-    setTimeout(() => {
-      onUpdateState({ touchdownActive: false });
-    }, 4500);
+    if (onTriggerGoal) {
+      onTriggerGoal(team);
+    } else {
+      onUpdateState({
+        goalActive: true,
+        goalTeam: team,
+        touchdownActive: false
+      });
+      setTimeout(() => {
+        onUpdateState({ goalActive: false, goalTeam: '' });
+      }, 3800);
+    }
+  };
+
+  // Helper for Touchdown trigger (uses goal celebration swipe)
+  const triggerTouchdown = (team: 'away' | 'home') => {
+    triggerGoalCelebration(team, 6);
   };
 
   // Helper to handle local logo file upload
@@ -448,64 +501,62 @@ export const ControlRoom: React.FC<ControlRoomProps> = ({
 
           {/* Quick Score Increments */}
           <div className="space-y-3">
-            <div className="text-xs font-bold text-slate-400 uppercase tracking-wider">Score Controls</div>
+            <div className="flex items-center justify-between text-xs font-bold text-slate-400 uppercase tracking-wider">
+              <span>Score Controls</span>
+              <span className="text-[10px] text-sky-400 font-black">TOUCHDOWN SWIPE</span>
+            </div>
             <div className="grid grid-cols-3 sm:grid-cols-6 gap-2">
               <button
-                onClick={() => {
-                  onUpdateState({ awayScore: state.awayScore + 6 });
-                  onTriggerSpinAway();
-                }}
-                className="bg-sky-600/30 hover:bg-sky-500 text-sky-300 hover:text-slate-950 font-black py-2 rounded-lg text-sm transition-all border border-sky-500/30 cursor-pointer"
+                onClick={() => triggerGoalCelebration('away', 6)}
+                className="bg-emerald-600/30 hover:bg-emerald-500 text-emerald-300 hover:text-slate-950 font-black py-2 rounded-lg text-sm transition-all border border-emerald-500/40 flex items-center justify-center gap-1 cursor-pointer shadow-sm active:scale-95"
+                title="Score +6 & Trigger Touchdown Swipe"
               >
-                +6 TD
+                <Sparkles className="w-3.5 h-3.5 text-emerald-400" />
+                <span>+6 TD</span>
               </button>
               <button
                 onClick={() => {
                   onUpdateState({ awayScore: state.awayScore + 3 });
-                  onTriggerSpinAway();
                 }}
-                className="bg-slate-800 hover:bg-sky-500 text-slate-200 hover:text-slate-950 font-bold py-2 rounded-lg text-sm transition-all border border-slate-700 cursor-pointer"
+                className="bg-slate-800 hover:bg-sky-500 text-slate-200 hover:text-slate-950 font-bold py-2 rounded-lg text-sm transition-all border border-slate-700 cursor-pointer active:scale-95"
               >
                 +3 FG
               </button>
               <button
                 onClick={() => {
-                  onUpdateState({ awayScore: state.awayScore + 1 });
-                  onTriggerSpinAway();
-                }}
-                className="bg-slate-800 hover:bg-sky-500 text-slate-200 hover:text-slate-950 font-bold py-2 rounded-lg text-sm transition-all border border-slate-700 cursor-pointer"
-              >
-                +1 XP
-              </button>
-              <button
-                onClick={() => {
                   onUpdateState({ awayScore: state.awayScore + 2 });
-                  onTriggerSpinAway();
                 }}
-                className="bg-slate-800 hover:bg-sky-500 text-slate-200 hover:text-slate-950 font-bold py-2 rounded-lg text-sm transition-all border border-slate-700 cursor-pointer"
+                className="bg-slate-800 hover:bg-sky-500 text-slate-200 hover:text-slate-950 font-bold py-2 rounded-lg text-sm transition-all border border-slate-700 cursor-pointer active:scale-95"
               >
                 +2 2PT
               </button>
               <button
                 onClick={() => {
-                  onUpdateState({ awayScore: Math.max(0, state.awayScore - 1) });
-                  onTriggerSpinAway();
+                  onUpdateState({ awayScore: state.awayScore + 1 });
                 }}
-                className="bg-slate-800 hover:bg-rose-500 text-slate-400 hover:text-white font-bold py-2 rounded-lg text-sm transition-all border border-slate-700 cursor-pointer"
+                className="bg-slate-800 hover:bg-sky-500 text-slate-200 hover:text-slate-950 font-bold py-2 rounded-lg text-sm transition-all border border-slate-700 cursor-pointer active:scale-95"
+              >
+                +1 XP
+              </button>
+              <button
+                onClick={() => {
+                  onUpdateState({ awayScore: Math.max(0, state.awayScore - 1) });
+                }}
+                className="bg-slate-800 hover:bg-rose-500 text-slate-400 hover:text-white font-bold py-2 rounded-lg text-sm transition-all border border-slate-700 cursor-pointer active:scale-95"
               >
                 -1
               </button>
               <button
-                onClick={onTriggerSpinAway}
-                className="bg-amber-500/20 hover:bg-amber-400 text-amber-300 hover:text-slate-950 font-black py-2 rounded-lg text-xs transition-all border border-amber-500/40 flex items-center justify-center gap-1 cursor-pointer"
-                title="Trigger Slot Machine Spin"
+                onClick={() => triggerGoalCelebration('away')}
+                className="bg-amber-500/20 hover:bg-amber-400 text-amber-300 hover:text-slate-950 font-black py-2 rounded-lg text-xs transition-all border border-amber-500/40 flex items-center justify-center gap-1 cursor-pointer active:scale-95"
+                title="Trigger Touchdown Gradient Swipe"
               >
                 <Sparkles className="w-3.5 h-3.5" />
-                <span>SPIN</span>
+                <span>SWIPE</span>
               </button>
             </div>
 
-            {/* Timeouts and Touchdown banner */}
+            {/* Timeouts and Goal / Touchdown banner */}
             <div className="flex items-center justify-between pt-2">
               <div className="flex items-center gap-1.5">
                 <span className="text-xs font-bold text-slate-400">Timeouts:</span>
@@ -525,11 +576,11 @@ export const ControlRoom: React.FC<ControlRoomProps> = ({
               </div>
 
               <button
-                onClick={() => triggerTouchdown('away')}
-                className="bg-gradient-to-r from-sky-500 to-indigo-600 hover:from-sky-400 hover:to-indigo-500 text-white text-xs font-black py-2 px-3 rounded-lg shadow-md transition-all flex items-center gap-1.5 cursor-pointer"
+                onClick={() => triggerGoalCelebration('away')}
+                className="bg-gradient-to-r from-sky-500 to-indigo-600 hover:from-sky-400 hover:to-indigo-500 text-white text-xs font-black py-2 px-3.5 rounded-lg shadow-md transition-all flex items-center gap-1.5 cursor-pointer active:scale-95"
               >
-                <Trophy className="w-3.5 h-3.5" />
-                <span>CELEBRATE TD</span>
+                <Sparkles className="w-3.5 h-3.5" />
+                <span>TOUCHDOWN!</span>
               </button>
             </div>
           </div>
@@ -558,64 +609,62 @@ export const ControlRoom: React.FC<ControlRoomProps> = ({
 
           {/* Quick Score Increments */}
           <div className="space-y-3">
-            <div className="text-xs font-bold text-slate-400 uppercase tracking-wider">Score Controls</div>
+            <div className="flex items-center justify-between text-xs font-bold text-slate-400 uppercase tracking-wider">
+              <span>Score Controls</span>
+              <span className="text-[10px] text-rose-400 font-black">TOUCHDOWN SWIPE</span>
+            </div>
             <div className="grid grid-cols-3 sm:grid-cols-6 gap-2">
               <button
-                onClick={() => {
-                  onUpdateState({ homeScore: state.homeScore + 6 });
-                  onTriggerSpinHome();
-                }}
-                className="bg-rose-600/30 hover:bg-rose-500 text-rose-300 hover:text-slate-950 font-black py-2 rounded-lg text-sm transition-all border border-rose-500/30 cursor-pointer"
+                onClick={() => triggerGoalCelebration('home', 6)}
+                className="bg-emerald-600/30 hover:bg-emerald-500 text-emerald-300 hover:text-slate-950 font-black py-2 rounded-lg text-sm transition-all border border-emerald-500/40 flex items-center justify-center gap-1 cursor-pointer shadow-sm active:scale-95"
+                title="Score +6 & Trigger Touchdown Swipe"
               >
-                +6 TD
+                <Sparkles className="w-3.5 h-3.5 text-emerald-400" />
+                <span>+6 TD</span>
               </button>
               <button
                 onClick={() => {
                   onUpdateState({ homeScore: state.homeScore + 3 });
-                  onTriggerSpinHome();
                 }}
-                className="bg-slate-800 hover:bg-rose-500 text-slate-200 hover:text-slate-950 font-bold py-2 rounded-lg text-sm transition-all border border-slate-700 cursor-pointer"
+                className="bg-slate-800 hover:bg-rose-500 text-slate-200 hover:text-slate-950 font-bold py-2 rounded-lg text-sm transition-all border border-slate-700 cursor-pointer active:scale-95"
               >
                 +3 FG
               </button>
               <button
                 onClick={() => {
-                  onUpdateState({ homeScore: state.homeScore + 1 });
-                  onTriggerSpinHome();
-                }}
-                className="bg-slate-800 hover:bg-rose-500 text-slate-200 hover:text-slate-950 font-bold py-2 rounded-lg text-sm transition-all border border-slate-700 cursor-pointer"
-              >
-                +1 XP
-              </button>
-              <button
-                onClick={() => {
                   onUpdateState({ homeScore: state.homeScore + 2 });
-                  onTriggerSpinHome();
                 }}
-                className="bg-slate-800 hover:bg-rose-500 text-slate-200 hover:text-slate-950 font-bold py-2 rounded-lg text-sm transition-all border border-slate-700 cursor-pointer"
+                className="bg-slate-800 hover:bg-rose-500 text-slate-200 hover:text-slate-950 font-bold py-2 rounded-lg text-sm transition-all border border-slate-700 cursor-pointer active:scale-95"
               >
                 +2 2PT
               </button>
               <button
                 onClick={() => {
-                  onUpdateState({ homeScore: Math.max(0, state.homeScore - 1) });
-                  onTriggerSpinHome();
+                  onUpdateState({ homeScore: state.homeScore + 1 });
                 }}
-                className="bg-slate-800 hover:bg-rose-500 text-slate-400 hover:text-white font-bold py-2 rounded-lg text-sm transition-all border border-slate-700 cursor-pointer"
+                className="bg-slate-800 hover:bg-rose-500 text-slate-200 hover:text-slate-950 font-bold py-2 rounded-lg text-sm transition-all border border-slate-700 cursor-pointer active:scale-95"
+              >
+                +1 XP
+              </button>
+              <button
+                onClick={() => {
+                  onUpdateState({ homeScore: Math.max(0, state.homeScore - 1) });
+                }}
+                className="bg-slate-800 hover:bg-rose-500 text-slate-400 hover:text-white font-bold py-2 rounded-lg text-sm transition-all border border-slate-700 cursor-pointer active:scale-95"
               >
                 -1
               </button>
               <button
-                onClick={onTriggerSpinHome}
-                className="bg-amber-500/20 hover:bg-amber-400 text-amber-300 hover:text-slate-950 font-black py-2 rounded-lg text-xs transition-all border border-amber-500/40 flex items-center justify-center gap-1 cursor-pointer"
-                title="Trigger Slot Machine Spin"
+                onClick={() => triggerGoalCelebration('home')}
+                className="bg-amber-500/20 hover:bg-amber-400 text-amber-300 hover:text-slate-950 font-black py-2 rounded-lg text-xs transition-all border border-amber-500/40 flex items-center justify-center gap-1 cursor-pointer active:scale-95"
+                title="Trigger Touchdown Gradient Swipe"
               >
                 <Sparkles className="w-3.5 h-3.5" />
-                <span>SPIN</span>
+                <span>SWIPE</span>
               </button>
             </div>
 
-            {/* Timeouts and Touchdown banner */}
+            {/* Timeouts and Goal / Touchdown banner */}
             <div className="flex items-center justify-between pt-2">
               <div className="flex items-center gap-1.5">
                 <span className="text-xs font-bold text-slate-400">Timeouts:</span>
@@ -635,11 +684,11 @@ export const ControlRoom: React.FC<ControlRoomProps> = ({
               </div>
 
               <button
-                onClick={() => triggerTouchdown('home')}
-                className="bg-gradient-to-r from-rose-500 to-amber-600 hover:from-rose-400 hover:to-amber-500 text-white text-xs font-black py-2 px-3 rounded-lg shadow-md transition-all flex items-center gap-1.5 cursor-pointer"
+                onClick={() => triggerGoalCelebration('home')}
+                className="bg-gradient-to-r from-rose-500 to-amber-600 hover:from-rose-400 hover:to-amber-500 text-white text-xs font-black py-2 px-3.5 rounded-lg shadow-md transition-all flex items-center gap-1.5 cursor-pointer active:scale-95"
               >
-                <Trophy className="w-3.5 h-3.5" />
-                <span>CELEBRATE TD</span>
+                <Sparkles className="w-3.5 h-3.5" />
+                <span>TOUCHDOWN!</span>
               </button>
             </div>
           </div>
@@ -657,6 +706,20 @@ export const ControlRoom: React.FC<ControlRoomProps> = ({
           </div>
 
           <div className="flex items-center gap-2">
+            {/* Auto Goal Swipe Toggle */}
+            <button
+              onClick={() => onUpdateState({ autoGoalSwipe: state.autoGoalSwipe === false ? true : false })}
+              className={`px-3 py-1.5 rounded-lg text-xs font-black flex items-center gap-1.5 border transition-all cursor-pointer ${
+                state.autoGoalSwipe !== false
+                  ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40 shadow-sm'
+                  : 'bg-slate-950 text-slate-500 border-slate-800 hover:text-slate-300'
+              }`}
+              title="Automatically trigger Touchdown swipe when scores increase"
+            >
+              <Sparkles className="w-3.5 h-3.5 text-emerald-400" />
+              <span>AUTO SWIPE: {state.autoGoalSwipe !== false ? 'ON' : 'OFF'}</span>
+            </button>
+
             {/* Red Zone Toggle */}
             <button
               onClick={() => onUpdateState({ redZone: !state.redZone })}
@@ -850,8 +913,8 @@ export const ControlRoom: React.FC<ControlRoomProps> = ({
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          {/* Away select */}
-          <div className="space-y-1.5">
+          {/* Away select & preview card */}
+          <div className="space-y-2">
             <label className="text-xs font-bold text-sky-400">Away Team</label>
             <select
               value={awaySelectIdx}
@@ -868,10 +931,41 @@ export const ControlRoom: React.FC<ControlRoomProps> = ({
                 </option>
               ))}
             </select>
+
+            {roster[awaySelectIdx] && (
+              <div className="bg-slate-950/80 border border-slate-800 rounded-xl p-3 flex items-center gap-3">
+                <div className="w-10 h-10 rounded-lg bg-slate-900 border border-slate-700 flex items-center justify-center overflow-hidden flex-shrink-0">
+                  {roster[awaySelectIdx].logoUrl ? (
+                    <img src={roster[awaySelectIdx].logoUrl} alt="" className="max-w-full max-h-full object-contain" />
+                  ) : (
+                    <span className="text-xs font-black text-slate-500">{roster[awaySelectIdx].abbr}</span>
+                  )}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center justify-between">
+                    <span className="font-black text-white text-xs truncate">{roster[awaySelectIdx].name}</span>
+                    <span className="text-[10px] font-mono text-slate-400 bg-slate-800 px-1.5 py-0.5 rounded">
+                      {roster[awaySelectIdx].abbr}
+                    </span>
+                  </div>
+                  <div
+                    className="h-2.5 w-full rounded mt-1.5 shadow-inner border border-white/10"
+                    style={{
+                      background: `linear-gradient(to right, ${roster[awaySelectIdx].gradients[0]}, ${roster[awaySelectIdx].gradients[1]})`
+                    }}
+                  />
+                  <div className="flex items-center gap-2 mt-1 text-[10px] font-mono text-slate-400">
+                    <span>{roster[awaySelectIdx].gradients[0]}</span>
+                    <span>→</span>
+                    <span>{roster[awaySelectIdx].gradients[1]}</span>
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
 
-          {/* Home select */}
-          <div className="space-y-1.5">
+          {/* Home select & preview card */}
+          <div className="space-y-2">
             <label className="text-xs font-bold text-rose-400">Home Team</label>
             <select
               value={homeSelectIdx}
@@ -888,7 +982,86 @@ export const ControlRoom: React.FC<ControlRoomProps> = ({
                 </option>
               ))}
             </select>
+
+            {roster[homeSelectIdx] && (
+              <div className="bg-slate-950/80 border border-slate-800 rounded-xl p-3 flex items-center gap-3">
+                <div className="w-10 h-10 rounded-lg bg-slate-900 border border-slate-700 flex items-center justify-center overflow-hidden flex-shrink-0">
+                  {roster[homeSelectIdx].logoUrl ? (
+                    <img src={roster[homeSelectIdx].logoUrl} alt="" className="max-w-full max-h-full object-contain" />
+                  ) : (
+                    <span className="text-xs font-black text-slate-500">{roster[homeSelectIdx].abbr}</span>
+                  )}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center justify-between">
+                    <span className="font-black text-white text-xs truncate">{roster[homeSelectIdx].name}</span>
+                    <span className="text-[10px] font-mono text-slate-400 bg-slate-800 px-1.5 py-0.5 rounded">
+                      {roster[homeSelectIdx].abbr}
+                    </span>
+                  </div>
+                  <div
+                    className="h-2.5 w-full rounded mt-1.5 shadow-inner border border-white/10"
+                    style={{
+                      background: `linear-gradient(to right, ${roster[homeSelectIdx].gradients[0]}, ${roster[homeSelectIdx].gradients[1]})`
+                    }}
+                  />
+                  <div className="flex items-center gap-2 mt-1 text-[10px] font-mono text-slate-400">
+                    <span>{roster[homeSelectIdx].gradients[0]}</span>
+                    <span>→</span>
+                    <span>{roster[homeSelectIdx].gradients[1]}</span>
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
+        </div>
+
+        {/* Logo Size & Box Fill Control */}
+        <div className="bg-slate-950/70 border border-slate-800/80 rounded-xl p-3.5 space-y-2.5">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <span className="text-xs font-bold text-slate-200">Logo Box Fill Scale</span>
+              <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-sky-500/20 text-sky-300 font-bold border border-sky-500/30">
+                {Math.round((state.logoScale ?? 1.1) * 100)}%
+              </span>
+            </div>
+            <div className="flex items-center gap-1">
+              {[
+                { label: 'Standard (100%)', scale: 1.0 },
+                { label: 'FOX Fill (110%)', scale: 1.1 },
+                { label: 'Max (120%)', scale: 1.2 },
+                { label: 'Ultra (125%)', scale: 1.25 }
+              ].map((preset) => (
+                <button
+                  key={preset.label}
+                  onClick={() => onUpdateState({ logoScale: preset.scale })}
+                  className={`text-[10px] font-bold px-2 py-1 rounded transition-all cursor-pointer ${
+                    Math.abs((state.logoScale ?? 1.1) - preset.scale) < 0.02
+                      ? 'bg-sky-500 text-slate-950 font-black'
+                      : 'bg-slate-800 text-slate-300 hover:bg-slate-700'
+                  }`}
+                >
+                  {preset.label.split(' ')[0]}
+                </button>
+              ))}
+            </div>
+          </div>
+          <div className="flex items-center gap-3">
+            <span className="text-[10px] font-mono text-slate-500">80%</span>
+            <input
+              type="range"
+              min="0.8"
+              max="1.3"
+              step="0.02"
+              value={state.logoScale ?? 1.1}
+              onChange={(e) => onUpdateState({ logoScale: parseFloat(e.target.value) })}
+              className="flex-1 accent-sky-400 cursor-pointer h-1.5 bg-slate-800 rounded-lg appearance-none"
+            />
+            <span className="text-[10px] font-mono text-slate-500">130%</span>
+          </div>
+          <p className="text-[11px] text-slate-400">
+            Fills the entire team pod box edge-to-edge while keeping the logo neatly bounded inside (FOX broadcast style).
+          </p>
         </div>
 
         <button
@@ -899,19 +1072,36 @@ export const ControlRoom: React.FC<ControlRoomProps> = ({
         </button>
       </div>
 
-      {/* 6. TEAM ROSTER MANAGER (WITH LOGO UPLOAD & PATH INPUT) */}
+      {/* 6. TEAM ROSTER MANAGER (WITH HEX CODE IMPORT & GRADIENT BUILDER) */}
       <div className="bg-slate-900/80 border border-slate-800 rounded-2xl p-5 shadow-lg space-y-4">
-        <div className="flex items-center justify-between pb-3 border-b border-slate-800">
+        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 pb-3 border-b border-slate-800">
           <div>
-            <h3 className="font-black text-lg text-indigo-400">LFG Team Roster Manager</h3>
-            <p className="text-xs text-slate-400">
-              Manage team abbreviations, gradients, and logo sources (supports local PC folder <code className="text-slate-300">C:\Users\skull\Documents\comet-scorebugs\logos\LFG Team Logos</code>, file upload, or URL).
+            <div className="flex items-center gap-2">
+              <h3 className="font-black text-lg text-indigo-400">LFG Team Roster Manager</h3>
+              <span className="px-2 py-0.5 rounded-full bg-indigo-500/20 text-indigo-300 font-mono text-xs font-bold border border-indigo-500/30">
+                {roster.length} Teams
+              </span>
+            </div>
+            <p className="text-xs text-slate-400 mt-0.5">
+              Manage team abbreviations, hex gradients, and logo sources. You can import raw color sheets or paste hex codes directly.
             </p>
           </div>
 
-          <div className="flex items-center gap-3">
-            <span className="text-xs font-bold text-slate-400">{rosterSaveStatus}</span>
+          <div className="flex items-center gap-2 flex-wrap">
+            <span className="text-xs font-bold text-slate-400 mr-1">{rosterSaveStatus}</span>
+
+            {/* IMPORT HEX CODES / GRADIENTS BUTTON */}
             <button
+              type="button"
+              onClick={() => setIsHexModalOpen(true)}
+              className="flex items-center gap-1.5 bg-gradient-to-r from-indigo-600 to-violet-600 hover:from-indigo-500 hover:to-violet-500 text-white font-black text-xs py-2 px-3.5 rounded-xl shadow-md transition-all cursor-pointer active:scale-98"
+            >
+              <Palette className="w-4 h-4" />
+              <span>IMPORT HEX CODES / GRADIENTS</span>
+            </button>
+
+            <button
+              type="button"
               onClick={() => {
                 const newTeam: TeamInfo = {
                   name: 'New Team',
@@ -920,10 +1110,10 @@ export const ControlRoom: React.FC<ControlRoomProps> = ({
                   gradients: ['#3b82f6', '#1e293b'],
                   accent: '#60a5fa'
                 };
-                const updated = [...roster, newTeam];
+                const updated = [newTeam, ...roster];
                 saveRoster(updated);
               }}
-              className="flex items-center gap-1.5 bg-indigo-600 hover:bg-indigo-500 text-white font-black text-xs py-2 px-3 rounded-xl transition-all cursor-pointer"
+              className="flex items-center gap-1.5 bg-slate-800 hover:bg-slate-700 text-white font-black text-xs py-2 px-3 rounded-xl transition-all cursor-pointer border border-slate-700"
             >
               <Plus className="w-3.5 h-3.5" />
               <span>ADD TEAM</span>
@@ -931,138 +1121,299 @@ export const ControlRoom: React.FC<ControlRoomProps> = ({
           </div>
         </div>
 
-        {/* Team List Table/Cards */}
-        <div className="space-y-3">
-          {roster.map((team, idx) => (
-            <div
-              key={idx}
-              className="bg-slate-950/70 border border-slate-800/80 p-3.5 rounded-xl grid grid-cols-1 md:grid-cols-12 gap-3 items-center"
+        {/* Quick Search and Info Bar */}
+        <div className="flex flex-col sm:flex-row items-center justify-between gap-3 bg-slate-950/60 border border-slate-800/80 p-3 rounded-xl">
+          <div className="relative w-full sm:w-80">
+            <Search className="w-4 h-4 text-slate-500 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+            <input
+              type="text"
+              value={teamSearchQuery}
+              onChange={(e) => setTeamSearchQuery(e.target.value)}
+              placeholder="Search 120+ LFG teams by name, abbr, or hex..."
+              className="w-full bg-slate-900 border border-slate-800 rounded-lg pl-9 pr-3 py-1.5 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500 font-medium"
+            />
+            {teamSearchQuery && (
+              <button
+                onClick={() => setTeamSearchQuery('')}
+                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-xs text-slate-400 hover:text-white"
+              >
+                ✕
+              </button>
+            )}
+          </div>
+
+          <div className="text-xs text-slate-400 flex items-center gap-3">
+            <span>
+              Showing <strong className="text-white">{filteredRoster.length}</strong> of {roster.length} teams
+            </span>
+            <button
+              onClick={() => setIsHexModalOpen(true)}
+              className="text-xs text-indigo-400 hover:text-indigo-300 font-bold underline cursor-pointer"
             >
-              {/* Logo Preview & Upload */}
-              <div className="md:col-span-2 flex items-center gap-2">
-                <div className="w-10 h-10 rounded-lg bg-slate-900 border border-slate-700 flex items-center justify-center overflow-hidden flex-shrink-0 relative">
-                  {team.logoUrl ? (
-                    <img src={team.logoUrl} alt={team.name} className="max-w-full max-h-full object-contain" />
-                  ) : (
-                    <span className="text-xs font-black text-slate-500">{team.abbr}</span>
-                  )}
-                </div>
-                <label className="flex items-center gap-1 px-2 py-1 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded text-[10px] font-bold cursor-pointer transition-all">
-                  <Upload className="w-3 h-3" />
-                  <span>Upload</span>
-                  <input
-                    type="file"
-                    accept="image/*"
-                    className="hidden"
-                    onChange={(e) => handleLogoUpload(e, idx)}
-                  />
-                </label>
-              </div>
+              Bulk Import or Export All
+            </button>
+          </div>
+        </div>
 
-              {/* Name */}
-              <div className="md:col-span-3">
-                <label className="block text-[10px] text-slate-500 font-bold mb-0.5">Team Name</label>
-                <input
-                  type="text"
-                  value={team.name}
-                  onChange={(e) => {
-                    const updated = [...roster];
-                    updated[idx] = { ...updated[idx], name: e.target.value };
-                    saveRoster(updated);
-                  }}
-                  className="bg-slate-900 border border-slate-800 text-white font-bold px-2 py-1.5 rounded-lg text-xs w-full"
-                />
-              </div>
-
-              {/* Abbreviation */}
-              <div className="md:col-span-1">
-                <label className="block text-[10px] text-slate-500 font-bold mb-0.5">Abbr</label>
-                <input
-                  type="text"
-                  maxLength={4}
-                  value={team.abbr}
-                  onChange={(e) => {
-                    const updated = [...roster];
-                    updated[idx] = { ...updated[idx], abbr: e.target.value.toUpperCase() };
-                    saveRoster(updated);
-                  }}
-                  className="bg-slate-900 border border-slate-800 text-white font-black px-2 py-1.5 rounded-lg text-xs w-full uppercase"
-                />
-              </div>
-
-              {/* Logo Path or URL */}
-              <div className="md:col-span-3">
-                <label className="block text-[10px] text-slate-500 font-bold mb-0.5">Logo URL / File Path</label>
-                <input
-                  type="text"
-                  value={team.logoUrl || ''}
-                  placeholder="C:\Users\skull\Documents\..."
-                  onChange={(e) => {
-                    const updated = [...roster];
-                    updated[idx] = { ...updated[idx], logoUrl: e.target.value };
-                    saveRoster(updated);
-                  }}
-                  className="bg-slate-900 border border-slate-800 text-slate-300 px-2 py-1.5 rounded-lg text-xs w-full font-mono"
-                />
-              </div>
-
-              {/* Gradients */}
-              <div className="md:col-span-2 flex items-center gap-2">
-                <div>
-                  <label className="block text-[10px] text-slate-500 font-bold mb-0.5">Color 1</label>
-                  <input
-                    type="color"
-                    value={team.gradients[0]}
-                    onChange={(e) => {
-                      const updated = [...roster];
-                      updated[idx] = {
-                        ...updated[idx],
-                        gradients: [e.target.value, updated[idx].gradients[1]]
-                      };
-                      saveRoster(updated);
-                    }}
-                    className="w-7 h-7 rounded border-0 cursor-pointer bg-transparent"
-                  />
-                </div>
-                <div>
-                  <label className="block text-[10px] text-slate-500 font-bold mb-0.5">Color 2</label>
-                  <input
-                    type="color"
-                    value={team.gradients[1]}
-                    onChange={(e) => {
-                      const updated = [...roster];
-                      updated[idx] = {
-                        ...updated[idx],
-                        gradients: [updated[idx].gradients[0], e.target.value]
-                      };
-                      saveRoster(updated);
-                    }}
-                    className="w-7 h-7 rounded border-0 cursor-pointer bg-transparent"
-                  />
-                </div>
-              </div>
-
-              {/* Delete Team */}
-              <div className="md:col-span-1 flex justify-end">
-                {roster.length > 2 && (
-                  <button
-                    onClick={() => {
-                      const updated = roster.filter((_, i) => i !== idx);
-                      saveRoster(updated);
-                      if (awaySelectIdx >= updated.length) setAwaySelectIdx(0);
-                      if (homeSelectIdx >= updated.length) setHomeSelectIdx(1);
-                    }}
-                    className="text-rose-400 hover:text-rose-300 p-1.5 bg-slate-900 hover:bg-slate-800 rounded-lg cursor-pointer transition-all"
-                    title="Delete Team"
-                  >
-                    <Trash2 className="w-4 h-4" />
-                  </button>
-                )}
-              </div>
+        {/* Team List Cards */}
+        <div className="space-y-3 max-h-[700px] overflow-y-auto pr-1">
+          {filteredRoster.length === 0 ? (
+            <div className="p-8 text-center bg-slate-950/40 rounded-xl border border-slate-800/60 text-slate-400 text-xs">
+              No teams match "{teamSearchQuery}". Try another search or{' '}
+              <button
+                onClick={() => setTeamSearchQuery('')}
+                className="text-indigo-400 underline font-bold"
+              >
+                clear search
+              </button>
+              .
             </div>
-          ))}
+          ) : (
+            filteredRoster.map(({ team, originalIdx }) => (
+              <div
+                key={originalIdx}
+                className="bg-slate-950/80 border border-slate-800/80 p-3.5 rounded-xl flex flex-col gap-3 shadow-sm hover:border-slate-700 transition-colors"
+              >
+                <div className="grid grid-cols-1 md:grid-cols-12 gap-3 items-center">
+                  {/* Logo Preview & Upload */}
+                  <div className="md:col-span-2 flex items-center gap-2">
+                    <div className="w-10 h-10 rounded-lg bg-slate-900 border border-slate-700 flex items-center justify-center overflow-hidden flex-shrink-0 relative">
+                      {team.logoUrl ? (
+                        <img src={team.logoUrl} alt={team.name} className="max-w-full max-h-full object-contain" />
+                      ) : (
+                        <span className="text-xs font-black text-slate-500">{team.abbr}</span>
+                      )}
+                    </div>
+                    <label className="flex items-center gap-1 px-2 py-1 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded text-[10px] font-bold cursor-pointer transition-all">
+                      <Upload className="w-3 h-3" />
+                      <span>Upload</span>
+                      <input
+                        type="file"
+                        accept="image/*"
+                        className="hidden"
+                        onChange={(e) => handleLogoUpload(e, originalIdx)}
+                      />
+                    </label>
+                  </div>
+
+                  {/* Team Name */}
+                  <div className="md:col-span-3">
+                    <label className="block text-[10px] text-slate-500 font-bold mb-0.5">Team Name</label>
+                    <input
+                      type="text"
+                      value={team.name}
+                      onChange={(e) => {
+                        const updated = [...roster];
+                        updated[originalIdx] = { ...updated[originalIdx], name: e.target.value };
+                        saveRoster(updated);
+                      }}
+                      className="bg-slate-900 border border-slate-800 text-white font-bold px-2 py-1.5 rounded-lg text-xs w-full"
+                    />
+                  </div>
+
+                  {/* Abbreviation */}
+                  <div className="md:col-span-1">
+                    <label className="block text-[10px] text-slate-500 font-bold mb-0.5">Abbr</label>
+                    <input
+                      type="text"
+                      maxLength={4}
+                      value={team.abbr}
+                      onChange={(e) => {
+                        const updated = [...roster];
+                        updated[originalIdx] = { ...updated[originalIdx], abbr: e.target.value.toUpperCase() };
+                        saveRoster(updated);
+                      }}
+                      className="bg-slate-900 border border-slate-800 text-white font-black px-2 py-1.5 rounded-lg text-xs w-full uppercase"
+                    />
+                  </div>
+
+                  {/* Logo URL / File Path */}
+                  <div className="md:col-span-4">
+                    <label className="block text-[10px] text-slate-500 font-bold mb-0.5">Logo URL or Path</label>
+                    <input
+                      type="text"
+                      value={team.logoUrl || ''}
+                      placeholder="C:\Users\skull\Documents\..."
+                      onChange={(e) => {
+                        const updated = [...roster];
+                        updated[originalIdx] = { ...updated[originalIdx], logoUrl: e.target.value };
+                        saveRoster(updated);
+                      }}
+                      className="bg-slate-900 border border-slate-800 text-slate-300 px-2 py-1.5 rounded-lg text-xs w-full font-mono"
+                    />
+                  </div>
+
+                  {/* Delete Team & Quick Set */}
+                  <div className="md:col-span-2 flex items-center justify-end gap-1.5">
+                    <button
+                      onClick={() => {
+                        setAwaySelectIdx(originalIdx);
+                        applyMatchup(originalIdx, homeSelectIdx);
+                      }}
+                      title="Set as Away Team"
+                      className={`px-2 py-1 rounded text-[10px] font-black cursor-pointer transition-all ${
+                        awaySelectIdx === originalIdx
+                          ? 'bg-sky-500 text-slate-950'
+                          : 'bg-slate-800 text-slate-400 hover:text-white'
+                      }`}
+                    >
+                      AWAY
+                    </button>
+                    <button
+                      onClick={() => {
+                        setHomeSelectIdx(originalIdx);
+                        applyMatchup(awaySelectIdx, originalIdx);
+                      }}
+                      title="Set as Home Team"
+                      className={`px-2 py-1 rounded text-[10px] font-black cursor-pointer transition-all ${
+                        homeSelectIdx === originalIdx
+                          ? 'bg-rose-500 text-white'
+                          : 'bg-slate-800 text-slate-400 hover:text-white'
+                      }`}
+                    >
+                      HOME
+                    </button>
+                    {roster.length > 2 && (
+                      <button
+                        onClick={() => {
+                          const updated = roster.filter((_, i) => i !== originalIdx);
+                          saveRoster(updated);
+                          if (awaySelectIdx >= updated.length) setAwaySelectIdx(0);
+                          if (homeSelectIdx >= updated.length) setHomeSelectIdx(1);
+                        }}
+                        className="text-rose-400 hover:text-rose-300 p-1.5 bg-slate-900 hover:bg-slate-800 rounded-lg cursor-pointer transition-all ml-1"
+                        title="Delete Team"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    )}
+                  </div>
+                </div>
+
+                {/* GRADIENTS & HEX IMPORT STRIP FOR THIS TEAM */}
+                <div className="pt-2 border-t border-slate-800/80 grid grid-cols-1 sm:grid-cols-12 gap-3 items-center bg-slate-900/40 p-2.5 rounded-lg">
+                  {/* Live Gradient Preview Bar */}
+                  <div className="sm:col-span-3 flex flex-col gap-1">
+                    <span className="text-[10px] text-slate-400 font-bold">Gradient Preview:</span>
+                    <div
+                      className="h-6 w-full rounded-md shadow-inner border border-white/10"
+                      style={{
+                        background: `linear-gradient(to right, ${team.gradients[0]}, ${team.gradients[1]})`
+                      }}
+                    />
+                  </div>
+
+                  {/* Color 1 (Hex + Picker) */}
+                  <div className="sm:col-span-3">
+                    <label className="block text-[10px] text-slate-400 font-bold mb-0.5">Color 1 (Primary)</label>
+                    <div className="flex items-center gap-1.5 bg-slate-900 border border-slate-800 rounded-lg px-2 py-1">
+                      <input
+                        type="color"
+                        value={team.gradients[0]}
+                        onChange={(e) => {
+                          const updated = [...roster];
+                          updated[originalIdx] = {
+                            ...updated[originalIdx],
+                            gradients: [e.target.value, updated[originalIdx].gradients[1]]
+                          };
+                          saveRoster(updated);
+                        }}
+                        className="w-5 h-5 rounded cursor-pointer bg-transparent border-0 flex-shrink-0"
+                      />
+                      <input
+                        type="text"
+                        value={team.gradients[0]}
+                        onChange={(e) => {
+                          const val = e.target.value;
+                          const updated = [...roster];
+                          updated[originalIdx] = {
+                            ...updated[originalIdx],
+                            gradients: [val, updated[originalIdx].gradients[1]]
+                          };
+                          saveRoster(updated);
+                        }}
+                        className="bg-transparent text-white font-mono text-xs w-full focus:outline-none"
+                      />
+                    </div>
+                  </div>
+
+                  {/* Color 2 (Hex + Picker) */}
+                  <div className="sm:col-span-3">
+                    <label className="block text-[10px] text-slate-400 font-bold mb-0.5">Color 2 (Secondary)</label>
+                    <div className="flex items-center gap-1.5 bg-slate-900 border border-slate-800 rounded-lg px-2 py-1">
+                      <input
+                        type="color"
+                        value={team.gradients[1]}
+                        onChange={(e) => {
+                          const updated = [...roster];
+                          updated[originalIdx] = {
+                            ...updated[originalIdx],
+                            gradients: [updated[originalIdx].gradients[0], e.target.value]
+                          };
+                          saveRoster(updated);
+                        }}
+                        className="w-5 h-5 rounded cursor-pointer bg-transparent border-0 flex-shrink-0"
+                      />
+                      <input
+                        type="text"
+                        value={team.gradients[1]}
+                        onChange={(e) => {
+                          const val = e.target.value;
+                          const updated = [...roster];
+                          updated[originalIdx] = {
+                            ...updated[originalIdx],
+                            gradients: [updated[originalIdx].gradients[0], val]
+                          };
+                          saveRoster(updated);
+                        }}
+                        className="bg-transparent text-white font-mono text-xs w-full focus:outline-none"
+                      />
+                    </div>
+                  </div>
+
+                  {/* Quick Inline Hex Paste */}
+                  <div className="sm:col-span-3">
+                    <label className="block text-[10px] text-indigo-300 font-bold mb-0.5">
+                      Paste Hex Codes
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="Paste #hex1 #hex2..."
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') {
+                          handleCardQuickHexPaste(originalIdx, (e.target as HTMLInputElement).value);
+                          (e.target as HTMLInputElement).value = '';
+                        }
+                      }}
+                      onBlur={(e) => {
+                        if (e.target.value.trim()) {
+                          handleCardQuickHexPaste(originalIdx, e.target.value);
+                          e.target.value = '';
+                        }
+                      }}
+                      className="bg-indigo-950/40 border border-indigo-800/60 text-white font-mono text-xs px-2 py-1.5 rounded-lg w-full placeholder-indigo-400/60 focus:outline-none focus:border-indigo-400"
+                    />
+                  </div>
+                </div>
+              </div>
+            ))
+          )}
         </div>
       </div>
+
+      {/* Hex Import & Color Sheet Modal */}
+      <HexImportModal
+        isOpen={isHexModalOpen}
+        onClose={() => setIsHexModalOpen(false)}
+        currentRoster={roster}
+        onApplyRoster={(newRoster) => {
+          saveRoster(newRoster);
+          const aIdx = newRoster.findIndex((t) => t.abbr === state.awayTeam);
+          const hIdx = newRoster.findIndex((t) => t.abbr === state.homeTeam);
+          if (aIdx >= 0) setAwaySelectIdx(aIdx);
+          if (hIdx >= 0) setHomeSelectIdx(hIdx);
+        }}
+      />
 
       {/* 7. OBS BROWSER SOURCE SETUP HELPER */}
       <div className="bg-slate-900/80 border border-slate-800 rounded-2xl p-5 shadow-lg space-y-3">

@@ -21,13 +21,34 @@ export default function App() {
   const [viewMode, setViewMode] = useState<'studio' | 'overlay'>('studio');
   const [showLuaScript, setShowLuaScript] = useState<boolean>(false);
   const [previewScale, setPreviewScale] = useState<number>(1.15);
-  const [spinKeyAway, setSpinKeyAway] = useState(0);
-  const [spinKeyHome, setSpinKeyHome] = useState(0);
 
   const prevScoreRef = useRef<{ away: number; home: number }>({
     away: INITIAL_FOOTBALL_STATE.awayScore,
     home: INITIAL_FOOTBALL_STATE.homeScore
   });
+
+  const goalTimerRef = useRef<any>(null);
+
+  const handleUpdateState = (partial: Partial<FootballState>) => {
+    stateSync.updateState(partial, true);
+  };
+
+  const triggerGoalCelebration = (team: 'away' | 'home') => {
+    if (goalTimerRef.current) clearTimeout(goalTimerRef.current);
+
+    handleUpdateState({
+      goalActive: true,
+      goalTeam: team,
+      touchdownActive: false
+    });
+
+    goalTimerRef.current = setTimeout(() => {
+      handleUpdateState({
+        goalActive: false,
+        goalTeam: ''
+      });
+    }, 3800);
+  };
 
   // Check URL query parameters for OBS Browser Source: ?view=overlay or ?overlay=true
   useEffect(() => {
@@ -42,34 +63,22 @@ export default function App() {
   // Subscribe to real-time state sync (BroadcastChannel, SSE, localStorage)
   useEffect(() => {
     const unsubscribe = stateSync.subscribe((newState) => {
-      // Check if away score changed -> trigger slot machine reel
-      if (newState.awayScore !== prevScoreRef.current.away) {
-        setSpinKeyAway((prev) => prev + 1);
-        prevScoreRef.current.away = newState.awayScore;
+      // If away score increased and autoGoalSwipe is enabled, trigger TUDN Liga MX goal swipe
+      if (newState.awayScore > prevScoreRef.current.away && newState.autoGoalSwipe !== false) {
+        triggerGoalCelebration('away');
       }
-      // Check if home score changed -> trigger slot machine reel
-      if (newState.homeScore !== prevScoreRef.current.home) {
-        setSpinKeyHome((prev) => prev + 1);
-        prevScoreRef.current.home = newState.homeScore;
+      // If home score increased and autoGoalSwipe is enabled, trigger TUDN Liga MX goal swipe
+      if (newState.homeScore > prevScoreRef.current.home && newState.autoGoalSwipe !== false) {
+        triggerGoalCelebration('home');
       }
 
+      prevScoreRef.current.away = newState.awayScore;
+      prevScoreRef.current.home = newState.homeScore;
       setGameState(newState);
     });
 
     return () => unsubscribe();
   }, []);
-
-  const handleUpdateState = (partial: Partial<FootballState>) => {
-    stateSync.updateState(partial, true);
-  };
-
-  const handleTriggerSpinAway = () => {
-    setSpinKeyAway((prev) => prev + 1);
-  };
-
-  const handleTriggerSpinHome = () => {
-    setSpinKeyHome((prev) => prev + 1);
-  };
 
   // -------------------------------------------------------------
   // OBS BROWSER OVERLAY MODE (100% Transparent, Bottom Centered)
@@ -82,8 +91,6 @@ export default function App() {
           <FoxScorebug
             state={gameState}
             scale={1.32}
-            spinKeyAway={spinKeyAway}
-            spinKeyHome={spinKeyHome}
           />
         </div>
       </div>
@@ -186,32 +193,44 @@ export default function App() {
             <FoxScorebug
               state={gameState}
               scale={previewScale}
-              spinKeyAway={spinKeyAway}
-              spinKeyHome={spinKeyHome}
             />
           </div>
 
-          {/* Quick slot machine preview trigger buttons below stage */}
-          <div className="mt-4 flex items-center gap-3">
+          {/* Quick Touchdown celebration preview buttons below stage */}
+          <div className="mt-4 flex flex-wrap items-center justify-center gap-3">
             <button
               onClick={() => {
-                handleUpdateState({ awayScore: gameState.awayScore + 7 });
-                handleTriggerSpinAway();
+                handleUpdateState({ awayScore: gameState.awayScore + 6 });
+                triggerGoalCelebration('away');
               }}
-              className="px-3 py-1.5 bg-sky-500/10 hover:bg-sky-500/20 text-sky-400 text-xs font-bold rounded-lg border border-sky-500/30 flex items-center gap-1.5 transition-all cursor-pointer"
+              className="px-3.5 py-1.5 bg-sky-500/15 hover:bg-sky-500/25 text-sky-300 text-xs font-black rounded-lg border border-sky-500/40 flex items-center gap-1.5 transition-all active:scale-95 cursor-pointer shadow-sm"
             >
-              <Sparkles className="w-3.5 h-3.5" />
-              <span>Test Away Spin (+7)</span>
+              <Sparkles className="w-3.5 h-3.5 text-sky-400" />
+              <span>TOUCHDOWN! Away (+6 & Swipe)</span>
             </button>
             <button
               onClick={() => {
-                handleUpdateState({ homeScore: gameState.homeScore + 7 });
-                handleTriggerSpinHome();
+                handleUpdateState({ homeScore: gameState.homeScore + 6 });
+                triggerGoalCelebration('home');
               }}
-              className="px-3 py-1.5 bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 text-xs font-bold rounded-lg border border-rose-500/30 flex items-center gap-1.5 transition-all cursor-pointer"
+              className="px-3.5 py-1.5 bg-rose-500/15 hover:bg-rose-500/25 text-rose-300 text-xs font-black rounded-lg border border-rose-500/40 flex items-center gap-1.5 transition-all active:scale-95 cursor-pointer shadow-sm"
             >
-              <Sparkles className="w-3.5 h-3.5" />
-              <span>Test Home Spin (+7)</span>
+              <Sparkles className="w-3.5 h-3.5 text-rose-400" />
+              <span>TOUCHDOWN! Home (+6 & Swipe)</span>
+            </button>
+            <button
+              onClick={() => triggerGoalCelebration('away')}
+              className="px-2.5 py-1.5 bg-slate-800/80 hover:bg-slate-700 text-slate-300 text-xs font-bold rounded-lg border border-slate-700 transition-all cursor-pointer active:scale-95"
+              title="Preview Away Touchdown gradient swipe without modifying score"
+            >
+              Swipe TD Away
+            </button>
+            <button
+              onClick={() => triggerGoalCelebration('home')}
+              className="px-2.5 py-1.5 bg-slate-800/80 hover:bg-slate-700 text-slate-300 text-xs font-bold rounded-lg border border-slate-700 transition-all cursor-pointer active:scale-95"
+              title="Preview Home Touchdown gradient swipe without modifying score"
+            >
+              Swipe TD Home
             </button>
           </div>
         </div>
@@ -227,8 +246,7 @@ export default function App() {
         <ControlRoom
           state={gameState}
           onUpdateState={handleUpdateState}
-          onTriggerSpinAway={handleTriggerSpinAway}
-          onTriggerSpinHome={handleTriggerSpinHome}
+          onTriggerGoal={triggerGoalCelebration}
         />
       </main>
     </div>

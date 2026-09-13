@@ -86,20 +86,24 @@ const DET_SVG = `data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg"
 
 const SF_SVG = `data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 120"><defs><filter id="sfShadow" x="-10%" y="-10%" width="120%" height="120%"><feDropShadow dx="0" dy="3" stdDeviation="3" flood-color="%23000000" flood-opacity="0.7"/></filter></defs><g filter="url(%23sfShadow)"><ellipse cx="100" cy="60" rx="90" ry="52" fill="%23AA0000" stroke="%23B3995D" stroke-width="6"/><ellipse cx="100" cy="60" rx="82" ry="44" fill="none" stroke="%23000000" stroke-width="2.5"/><ellipse cx="100" cy="60" rx="79" ry="41" fill="none" stroke="%23ffffff" stroke-width="3"/><text x="100" y="75" font-family="'Impact', 'Arial Black', sans-serif" font-size="44" font-style="italic" font-weight="900" fill="%23ffffff" stroke="%23000000" stroke-width="1.8" text-anchor="middle" letter-spacing="-2">SF</text></g></svg>`;
 
+const initialTeams = readTeamsFile();
+const defaultAway = initialTeams.find((t: any) => t.abbr === "SYR") || initialTeams[0];
+const defaultHome = initialTeams.find((t: any) => t.abbr === "SD") || initialTeams[1] || initialTeams[0];
+
 let currentState = {
   visible: true,
-  awayTeam: "DET",
+  awayTeam: defaultAway ? defaultAway.abbr : "SYR",
   awayScore: 0,
   awayTimeouts: 3,
-  awayGradients: ["#0076B6", "#041E42"],
-  awayAccent: "#0076B6",
-  awayLogoUrl: DET_SVG,
-  homeTeam: "SF",
+  awayGradients: defaultAway ? defaultAway.gradients : ["#ff8103", "#0e77c6"],
+  awayAccent: defaultAway ? defaultAway.accent : "#ce3907",
+  awayLogoUrl: defaultAway ? defaultAway.logoUrl : "",
+  homeTeam: defaultHome ? defaultHome.abbr : "SD",
   homeScore: 0,
   homeTimeouts: 3,
-  homeGradients: ["#AA0000", "#4B0000"],
-  homeAccent: "#B3995D",
-  homeLogoUrl: SF_SVG,
+  homeGradients: defaultHome ? defaultHome.gradients : ["#1e6eb6", "#fcb511"],
+  homeAccent: defaultHome ? defaultHome.accent : "#e4e6de",
+  homeLogoUrl: defaultHome ? defaultHome.logoUrl : "",
   possession: "away", // 'away' | 'home' | 'none'
   quarter: "1ST",
   clock: "14:25",
@@ -109,6 +113,11 @@ let currentState = {
   redZone: false,
   touchdownActive: false,
   touchdownTeam: "",
+  goalActive: false,
+  goalTeam: "",
+  celebrationText: "TOUCHDOWN!",
+  autoGoalSwipe: true,
+  logoScale: 1.08,
   lastUpdated: Date.now()
 };
 

@@ -31,6 +31,11 @@ export interface FootballState {
   redZone?: boolean;
   touchdownActive?: boolean;
   touchdownTeam?: string; // 'away' | 'home' | ''
+  goalActive?: boolean;
+  goalTeam?: 'away' | 'home' | '';
+  celebrationText?: string; // e.g. "TOUCHDOWN!"
+  autoGoalSwipe?: boolean; // trigger swipe on score increment (default true)
+  logoScale?: number; // scale multiplier to fill box (default: 1.08)
   lastUpdated?: number;
 }
 

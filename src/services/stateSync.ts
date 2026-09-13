@@ -3,19 +3,19 @@ import { resolveTeamLogo } from '../data/teamLogos';
 
 export const INITIAL_FOOTBALL_STATE: FootballState = {
   visible: true,
-  awayTeam: 'DET',
+  awayTeam: 'SYR',
   awayScore: 0,
   awayTimeouts: 3,
-  awayGradients: ['#0076B6', '#041E42'],
-  awayAccent: '#0076B6',
-  awayLogoUrl: resolveTeamLogo('DET'),
+  awayGradients: ['#ff8103', '#0e77c6'],
+  awayAccent: '#ce3907',
+  awayLogoUrl: resolveTeamLogo('SYR'),
 
-  homeTeam: 'SF',
+  homeTeam: 'SD',
   homeScore: 0,
   homeTimeouts: 3,
-  homeGradients: ['#AA0000', '#4B0000'],
-  homeAccent: '#B3995D',
-  homeLogoUrl: resolveTeamLogo('SF'),
+  homeGradients: ['#1e6eb6', '#fcb511'],
+  homeAccent: '#e4e6de',
+  homeLogoUrl: resolveTeamLogo('SD'),
 
   possession: 'away',
   quarter: '1ST',
@@ -26,6 +26,11 @@ export const INITIAL_FOOTBALL_STATE: FootballState = {
   redZone: false,
   touchdownActive: false,
   touchdownTeam: '',
+  goalActive: false,
+  goalTeam: '',
+  celebrationText: 'TOUCHDOWN!',
+  autoGoalSwipe: true,
+  logoScale: 1.08,
   lastUpdated: Date.now()
 };
 
