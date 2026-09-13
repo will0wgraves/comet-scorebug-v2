@@ -290,11 +290,15 @@ export const FoxScorebug: React.FC<FoxScorebugProps> = ({
                   {/* Leading Laser Flare on right border */}
                   <div className="absolute right-0 top-0 bottom-0 w-1.5 bg-white shadow-[0_0_14px_#ffffff,0_0_28px_rgba(56,189,248,0.9)] pointer-events-none" />
 
-                  {/* Flashing TOUCHDOWN! Typography */}
+                  {/* Smooth Flashing TOUCHDOWN! Typography (Smooth White & Gray flash, no shaking) */}
                   <motion.div
                     animate={{
-                      scale: [1, 1.07, 1, 1.07, 1],
-                      opacity: [0.94, 1, 0.94, 1, 0.94]
+                      color: ['#ffffff', '#94a3b8', '#ffffff'],
+                      textShadow: [
+                        '0 0 20px rgba(255,255,255,0.95), 0 0 32px rgba(255,255,255,0.75)',
+                        '0 0 8px rgba(148,163,184,0.4), 0 0 16px rgba(100,116,139,0.3)',
+                        '0 0 20px rgba(255,255,255,0.95), 0 0 32px rgba(255,255,255,0.75)'
+                      ]
                     }}
                     transition={{
                       duration: 0.55,
@@ -304,10 +308,7 @@ export const FoxScorebug: React.FC<FoxScorebugProps> = ({
                     className="relative z-20 flex items-center justify-center gap-3 px-4"
                   >
                     <span
-                      className="font-redhat font-black italic text-[32px] sm:text-[38px] tracking-[0.12em] text-white uppercase leading-none select-none drop-shadow-[0_4px_12px_rgba(0,0,0,0.95)]"
-                      style={{
-                        textShadow: '0 0 16px rgba(255,255,255,0.95), 0 0 32px rgba(255,255,255,0.7)'
-                      }}
+                      className="font-redhat font-black italic text-[32px] sm:text-[38px] tracking-[0.12em] uppercase leading-none select-none drop-shadow-[0_4px_12px_rgba(0,0,0,0.95)]"
                     >
                       {celebrationText}
                     </span>
@@ -353,11 +354,15 @@ export const FoxScorebug: React.FC<FoxScorebugProps> = ({
                   {/* Leading Laser Flare on left border */}
                   <div className="absolute left-0 top-0 bottom-0 w-1.5 bg-white shadow-[0_0_14px_#ffffff,0_0_28px_rgba(239,68,68,0.9)] pointer-events-none" />
 
-                  {/* Flashing TOUCHDOWN! Typography */}
+                  {/* Smooth Flashing TOUCHDOWN! Typography (Smooth White & Gray flash, no shaking) */}
                   <motion.div
                     animate={{
-                      scale: [1, 1.07, 1, 1.07, 1],
-                      opacity: [0.94, 1, 0.94, 1, 0.94]
+                      color: ['#ffffff', '#94a3b8', '#ffffff'],
+                      textShadow: [
+                        '0 0 20px rgba(255,255,255,0.95), 0 0 32px rgba(255,255,255,0.75)',
+                        '0 0 8px rgba(148,163,184,0.4), 0 0 16px rgba(100,116,139,0.3)',
+                        '0 0 20px rgba(255,255,255,0.95), 0 0 32px rgba(255,255,255,0.75)'
+                      ]
                     }}
                     transition={{
                       duration: 0.55,
@@ -367,10 +372,7 @@ export const FoxScorebug: React.FC<FoxScorebugProps> = ({
                     className="relative z-20 flex items-center justify-center gap-3 px-4"
                   >
                     <span
-                      className="font-redhat font-black italic text-[32px] sm:text-[38px] tracking-[0.12em] text-white uppercase leading-none select-none drop-shadow-[0_4px_12px_rgba(0,0,0,0.95)]"
-                      style={{
-                        textShadow: '0 0 16px rgba(255,255,255,0.95), 0 0 32px rgba(255,255,255,0.7)'
-                      }}
+                      className="font-redhat font-black italic text-[32px] sm:text-[38px] tracking-[0.12em] uppercase leading-none select-none drop-shadow-[0_4px_12px_rgba(0,0,0,0.95)]"
                     >
                       {celebrationText}
                     </span>
